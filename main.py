@@ -67,7 +67,8 @@ class Reverb:
         # check if command exists
         cmd_class = next((cmd for cmd in self.commands if cmd.name == command), None)
         if cmd_class is not None:
-            cmd_class.run(self, user, args)
+            command_thread = threading.Thread(target=cmd_class.run, args=(self, user, args), daemon=True)
+            command_thread.start()
             self.log.debug(f"command ran from {user['name']}: {command} {' '.join(args)}")
 
     def message_received(self, text: TextMessage):
