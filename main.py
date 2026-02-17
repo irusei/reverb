@@ -37,7 +37,7 @@ class Reverb:
         self.mumble: pymumble.Mumble = mumble
         self.queue = []
         self.current_song = None
-        self.commands: list[Command] = []
+        self.commands: dict[str, Command] = dict()
         self.paused = False
 
         self.mumble.start()
@@ -60,13 +60,13 @@ class Reverb:
         for file in os.listdir(folder):
             if file.endswith(".py"):
                 command_name = file.split(".")[0]  # remove the extension
-                self.commands.append(Command(command_name))
+                self.commands[command_name] = Command(command_name)
                 self.log.debug(f"registered command {command_name}")
 
     def handle_command(self, user: pymumble.mumble.users.User, command: str, args: list[str]):
         # check if command exists
-        cmd_class = next((cmd for cmd in self.commands if cmd.name == command), None)
-        if cmd_class is not None:
+        if command in self.commands:
+            cmd_class = self.commands[command]
             command_thread = threading.Thread(target=cmd_class.run, args=(self, user, args), daemon=True)
             command_thread.start()
             self.log.debug(f"command ran from {user['name']}: {command} {' '.join(args)}")
