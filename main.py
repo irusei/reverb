@@ -133,12 +133,21 @@ class Reverb:
 
                     self.mumble.sound_output.add_sound(raw_music)
 
-                while self.mumble.sound_output.get_buffer_size() > 0.5:
-                    if self.paused:
+                pause_buffer = None
+                while pause_buffer is not None or self.mumble.sound_output.get_buffer_size() > 0.5:
+                    if self.paused and pause_buffer is None:
+                        print("Running")
+                        pause_buffer = self.mumble.sound_output.pcm
+                        self.mumble.sound_output.clear_buffer()
                         sleep(0.01)
                         continue
 
+                    if not self.paused and pause_buffer is not None:
+                        self.mumble.sound_output.pcm = pause_buffer
+                        pause_buffer = None
+
                     if self.current_song is None:
+                        self.paused = False # resume song
                         self.mumble.sound_output.clear_buffer()
                         sound.kill()
                         break
