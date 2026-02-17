@@ -6,3 +6,4 @@ class Song:
         self.source = source
         self.id = id
         self.playing = False
+        self.counterpart = None

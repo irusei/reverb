@@ -27,7 +27,6 @@ USER_NAME = os.getenv('USER_NAME')
 def prepare_folders():
     os.makedirs("./cache", exist_ok=True)
 
-
 class Reverb:
     def __init__(self, mumble: pymumble.Mumble):
         self.log = logging.getLogger("bot")
@@ -36,6 +35,7 @@ class Reverb:
         self.utils = Utils(self)
         self.mumble: pymumble.Mumble = mumble
         self.queue = []
+        self.song_queue: list[Song] = []
         self.current_song = None
         self.commands: dict[str, Command] = dict()
         self.paused = False
@@ -53,6 +53,9 @@ class Reverb:
 
         worker_thread = threading.Thread(target=self.worker_thread, daemon=True)
         worker_thread.start()
+
+        converter_thread = threading.Thread(target=self.converter_thread, daemon=True)
+        converter_thread.start()
 
     def register_commands(self):
         folder = "./commands"
@@ -85,41 +88,68 @@ class Reverb:
             # handle command
             self.handle_command(user, command, args)
 
-    def worker_thread(self):
+    def clear_cache(self):
+        for file_name in os.listdir("./cache"):
+            no_extension = os.path.splitext(file_name)[0]
+            in_queue = any(str(queued.id) == no_extension.strip() for queued in self.song_queue)
+
+            if not in_queue and no_extension != file_name: # avoid yt-dlp temp files
+                os.remove(os.path.join("./cache", file_name))
+
+
+    def converter_thread(self):
         while True:
-            if self.current_song is None:
-                if len(self.queue) == 0:
+            if len(self.queue) == 0:
+                sleep(0.01)
+                continue
+
+            counterparts = set(song.counterpart for song in self.song_queue)
+
+            for unqueued_song in self.queue.copy():
+                if unqueued_song in counterparts:
+                    sleep(0.01)
                     continue
 
-                # clear cache
-                for file in os.listdir("./cache"):
-                    os.remove(os.path.join("./cache", file))
-
-                self.log.debug(f"GOING FORWARD WITH SONGS")
-
-                next_song = self.queue[0]
-                song = None
-
                 # Convert to "Song" class
-                if isinstance(next_song, YTVideo):
-                    if next_song.url is None:
-                        # Skip to next
-                        self.current_song = None
-                        self.queue.remove(next_song)
+                if isinstance(unqueued_song, YTVideo):
+                    if unqueued_song.url is None:
+                        self.queue.remove(unqueued_song)
                         continue
 
                     id = uuid.uuid4()
                     source = "./cache/%s" % id
-                    youtube.get_source(next_song.url, source)
+                    youtube.get_source(unqueued_song.url, source)
                     source += ".mp3"  # yt-dlp appends .mp3 for some reason
-                    song = Song(id, youtube.format_artist(next_song), self.utils.format_title(next_song.title), next_song.duration, source)
+                    song = Song(id, youtube.format_artist(unqueued_song), self.utils.format_title(unqueued_song.title), unqueued_song.duration, source)
+                    song.counterpart = unqueued_song
 
-                self.current_song = song
+                    self.song_queue.append(song)
+
+    def remove_song(self, song: Song):
+        self.queue.remove(song.counterpart)
+        self.song_queue.remove(song)
+
+    def worker_thread(self):
+        while True:
+            if self.current_song is None:
+                if len(self.song_queue) == 0:
+                    sleep(0.01)
+                    continue
+
+                # clear cache
+                self.clear_cache()
+
+                next_song = self.song_queue[0]
+
+                if next_song is None:
+                    continue
+
+                self.current_song = next_song
 
                 # play song
                 command = [
                     "ffmpeg",
-                    "-i", song.source,
+                    "-i", next_song.source,
                     "-f", "s16le",
                     "-ac", "1",
                     "-ar", "48000",
@@ -129,7 +159,7 @@ class Reverb:
                 # broadcast playing
                 channel: pymumble_py3.mumble.channels.Channel = self.mumble.my_channel()
                 channel.send_text_message(
-                    "Now playing: %s - %s [%s]" % (song.artist, song.title, self.utils.format_duration(song.duration)))
+                    "Now playing: %s - %s [%s]" % (next_song.artist, next_song.title, self.utils.format_duration(next_song.duration)))
                 sound = sp.Popen(command, stdout=sp.PIPE, stderr=sp.DEVNULL, bufsize=1024)
                 while True:
                     raw_music = sound.stdout.read(1024)
@@ -160,7 +190,7 @@ class Reverb:
                     sleep(0.01)
 
                 self.current_song = None
-                self.queue.remove(next_song)
+                self.remove_song(next_song)
 
 
 if __name__ == "__main__":
