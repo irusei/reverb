@@ -3,6 +3,8 @@ import math
 
 import pymumble_py3.users
 
+from filter_rules import clean_title
+
 class Utils:
     def __init__(self, reverb):
         self.reverb = reverb
@@ -15,6 +17,14 @@ class Utils:
         seconds = math.ceil(duration % 60)
 
         return "%s:%s" % (minutes, seconds)
+
+    def format_title(self, title):
+        new_title = title
+        if "-" in title:
+            new_title = title.split("-", 1)[1]
+
+        # filter rules
+        return clean_title(new_title)
 
     def unhtml_arg(self, arg):
         # TODO: make this better

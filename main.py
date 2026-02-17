@@ -106,7 +106,7 @@ class Reverb:
                     source = "./cache/%s" % id
                     youtube.get_source(next_song.url, source)
                     source += ".mp3"  # yt-dlp appends .mp3 for some reason
-                    song = Song(id, "UNKNOWN", next_song.title, next_song.duration, source)
+                    song = Song(id, youtube.format_artist(next_song), self.utils.format_title(next_song.title), next_song.duration, source)
 
                 self.current_song = song
 
