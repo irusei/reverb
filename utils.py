@@ -13,10 +13,10 @@ class Utils:
         return user["channel_id"] == self.reverb.mumble.users.myself["channel_id"]
 
     def format_duration(self, duration):
-        minutes = math.floor(duration / 60)
-        seconds = math.ceil(duration % 60)
+        minutes: str = str(math.floor(duration / 60))
+        seconds: str = str(math.ceil(duration % 60))
 
-        return "%s:%s" % (minutes, seconds)
+        return "%s:%s" % (minutes.zfill(2), seconds.zfill(2))
 
     def format_title(self, title):
         new_title = title
