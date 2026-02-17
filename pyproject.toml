@@ -1,0 +1,10 @@
+[project]
+name = "reverb"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.11, <3.12"
+dependencies = [
+    "dotenv>=0.9.9",
+    "pymumble>=1.6.1",
+    "yt-dlp>=2026.2.4",
+]
