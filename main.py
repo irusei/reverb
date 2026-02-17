@@ -136,7 +136,6 @@ class Reverb:
                 pause_buffer = None
                 while pause_buffer is not None or self.mumble.sound_output.get_buffer_size() > 0.5:
                     if self.paused and pause_buffer is None:
-                        print("Running")
                         pause_buffer = self.mumble.sound_output.pcm
                         self.mumble.sound_output.clear_buffer()
                         sleep(0.01)
