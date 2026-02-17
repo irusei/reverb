@@ -5,12 +5,16 @@ from reverb_types.ytvideo import YTVideo
 def search_youtube(query, limit=1):
     ytdl_options = {
         "quiet": True,
-        "skip_download": True
+        "skip_download": True,
+        "extract_flat": True
     }
 
     yt_query = f"ytsearch{limit}:{query}"
     if "https://" in query or "http://" in query:
         yt_query = query
+
+    if "list=" in query:
+        ytdl_options["extract_flat"] = False
 
     with yt_dlp.YoutubeDL(ytdl_options) as ytdlp:
         info = ytdlp.extract_info(yt_query, download=False)

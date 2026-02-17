@@ -102,6 +102,12 @@ class Reverb:
 
                 # Convert to "Song" class
                 if isinstance(next_song, YTVideo):
+                    if next_song.url is None:
+                        # Skip to next
+                        self.current_song = None
+                        self.queue.remove(next_song)
+                        continue
+
                     id = uuid.uuid4()
                     source = "./cache/%s" % id
                     youtube.get_source(next_song.url, source)
