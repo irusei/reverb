@@ -1,7 +1,7 @@
 import subprocess as sp
 import os
 import threading
-import uuid
+from filecmp import clear_cache
 from time import sleep
 
 from dotenv import load_dotenv
@@ -11,8 +11,9 @@ import logging
 import pymumble_py3.constants
 from pymumble_py3.messages import TextMessage
 
+from metadata.youtubesong import YoutubeSong
 from reverb_types.song import Song
-from reverb_types.ytvideo import YTVideo
+from metadata.metadata import Metadata
 
 import handlers.youtube as youtube
 
@@ -34,7 +35,7 @@ class Reverb:
         self.log.setLevel(logging.DEBUG)
         self.utils = Utils(self)
         self.mumble: pymumble.Mumble = mumble
-        self.queue = []
+        self.metadata_queue: list[Metadata] = []
         self.song_queue: list[Song] = []
         self.current_song = None
         self.commands: dict[str, Command] = dict()
@@ -46,6 +47,7 @@ class Reverb:
         mumble.set_bandwidth(192000)
 
         prepare_folders()
+        self.clear_cache(full=True)
         self.register_commands()
         # callbacks
         self.mumble.callbacks.set_callback(pymumble_py3.constants.PYMUMBLE_CLBK_TEXTMESSAGERECEIVED,
@@ -88,45 +90,50 @@ class Reverb:
             # handle command
             self.handle_command(user, command, args)
 
-    def clear_cache(self):
+    def clear_cache(self, full=False):
         for file_name in os.listdir("./cache"):
             no_extension = os.path.splitext(file_name)[0]
-            in_queue = any(str(queued.id) == no_extension.strip() for queued in self.song_queue)
+            in_queue = any(metadata.id == no_extension.strip() for metadata in self.metadata_queue)
 
-            if not in_queue and no_extension != file_name: # avoid yt-dlp temp files
+            if not full:
+                if not in_queue and no_extension != file_name:  # avoid yt-dlp temp files
+                    os.remove(os.path.join("./cache", file_name))
+            else:
                 os.remove(os.path.join("./cache", file_name))
 
 
     def converter_thread(self):
         while True:
-            if len(self.queue) == 0:
+            if len(self.metadata_queue) == 0:
                 sleep(0.01)
                 continue
 
-            counterparts = set(song.counterpart for song in self.song_queue)
+            id_set = set(song.id for song in self.song_queue)
 
-            for unqueued_song in self.queue.copy():
-                if unqueued_song in counterparts:
+            # find songs that haven't been downloaded yet
+            for unqueued_song in self.metadata_queue.copy():
+                if unqueued_song.id in id_set:
                     sleep(0.01)
                     continue
 
                 # Convert to "Song" class
-                if isinstance(unqueued_song, YTVideo):
+                if isinstance(unqueued_song, YoutubeSong):
                     if unqueued_song.url is None:
-                        self.queue.remove(unqueued_song)
+                        self.metadata_queue.remove(unqueued_song)
                         continue
 
-                    id = uuid.uuid4()
-                    source = "./cache/%s" % id
+                    source = "./cache/%s" % unqueued_song.id
                     youtube.get_source(unqueued_song.url, source)
                     source += ".mp3"  # yt-dlp appends .mp3 for some reason
-                    song = Song(id, youtube.format_artist(unqueued_song), self.utils.format_title(unqueued_song.title), unqueued_song.duration, source)
-                    song.counterpart = unqueued_song
+                    song = Song(unqueued_song.id, unqueued_song.artist, unqueued_song.title, unqueued_song.duration, source)
 
                     self.song_queue.append(song)
 
     def remove_song(self, song: Song):
-        self.queue.remove(song.counterpart)
+        for metadata in self.metadata_queue.copy():
+            if metadata.id == song.id:
+                self.metadata_queue.remove(metadata)
+
         self.song_queue.remove(song)
 
     def worker_thread(self):

@@ -4,6 +4,5 @@ class Song:
         self.title = title
         self.duration = duration
         self.source = source
-        self.id = id
+        self.id = str(id)
         self.playing = False
-        self.counterpart = None
