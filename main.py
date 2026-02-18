@@ -1,7 +1,6 @@
 import subprocess as sp
 import os
 import threading
-from filecmp import clear_cache
 from time import sleep, time
 
 from dotenv import load_dotenv
