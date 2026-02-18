@@ -163,6 +163,7 @@ class Reverb:
                     "-f", "s16le",
                     "-ac", "1",
                     "-ar", "48000",
+                    "-af", "aresample=resampler=soxr",
                     "-"
                 ]
 
