@@ -11,8 +11,8 @@ def search_youtube(query, limit=1):
     if "https://" in query or "http://" in query:
         yt_query = query
 
-    if "list=" in query or "/sets/" in query:
-        ytdl_options["extract_flat"] = False
+        if "list=" in query or "/sets/" in query:
+            ytdl_options["extract_flat"] = False
 
     with yt_dlp.YoutubeDL(ytdl_options) as ytdlp:
         info = ytdlp.extract_info(yt_query, download=False)
