@@ -84,7 +84,8 @@ VERSION_FILTER_RULES: List[FilterRule] = [
 YOUTUBE_TRACK_FILTER_RULES: List[FilterRule] = [
     (r"^\s+|\s+$", ""),
     (r"\*+\s?\S+\s?\*+$", ""),
-    (r"\[[^\]]+\]", ""),
+    #(r"\[[^\]]+\]", ""),
+    (r"\[(Official|Music Video|Audio|HD|HQ|Lyrics|Explicit)\]", ""),
     (r"【[^\]]+】", ""),
     (r"（[^\]]+）", ""),
     (r"\([^)]*version\)$", ""),
@@ -128,3 +129,4 @@ def clean_title(text: str) -> str:
         + TRIM_SYMBOLS_FILTER_RULES
     )
     return apply_filter_rules(combined, text).strip()
+print(clean_title("Yeat - [ADL IS COMING]"))
