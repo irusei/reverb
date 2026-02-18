@@ -2,7 +2,7 @@ import subprocess as sp
 import os
 import threading
 from filecmp import clear_cache
-from time import sleep
+from time import sleep, time
 
 from dotenv import load_dotenv
 import pymumble_py3 as pymumble
@@ -16,6 +16,7 @@ from reverb_types.song import Song
 from metadata.metadata import Metadata
 
 import handlers.youtube as youtube
+from scrobbling.scrobbler import Scrobbler
 
 load_dotenv()
 PREFIX = os.getenv('PREFIX')
@@ -24,6 +25,8 @@ PORT = int(os.getenv('PORT'))
 PASSWORD = os.getenv('PASSWORD')
 USER_NAME = os.getenv('USER_NAME')
 
+LAST_FM_API_KEY = os.getenv('LAST_FM_API_KEY')
+LAST_FM_API_SECRET = os.getenv('LAST_FM_API_SECRET')
 
 def prepare_folders():
     os.makedirs("./cache", exist_ok=True)
@@ -40,7 +43,8 @@ class Reverb:
         self.current_song = None
         self.commands: dict[str, Command] = dict()
         self.paused = False
-
+        # TODO: make the api keys optional
+        self.scrobbler = Scrobbler(LAST_FM_API_KEY, LAST_FM_API_SECRET)
         self.mumble.start()
         self.mumble.is_ready()
 
@@ -167,6 +171,14 @@ class Reverb:
                 channel: pymumble_py3.mumble.channels.Channel = self.mumble.my_channel()
                 channel.send_text_message(
                     "Now playing: %s - %s [%s]" % (next_song.artist, next_song.title, self.utils.format_duration(next_song.duration)))
+
+                # scrobble tracks for authenticated users
+                if next_song.duration > 30: # per last.fm guidelines
+                    for user in channel.get_users():
+                        user_name = user["name"]
+                        if self.scrobbler.is_authenticated(user_name):
+                            self.scrobbler.update_now_playing(user_name, next_song.artist, next_song.title, next_song.duration)
+
                 sound = sp.Popen(command, stdout=sp.PIPE, stderr=sp.DEVNULL, bufsize=1024)
                 while True:
                     raw_music = sound.stdout.read(1024)
@@ -195,6 +207,15 @@ class Reverb:
                         break
 
                     sleep(0.01)
+
+                # check if song didn't get skipped and it finished (current_song should not be None in that case)
+                # ideally this should scrobble after half of the song but it's good enough
+                if self.current_song is not None:
+                    if next_song.duration > 30:  # per last.fm guidelines
+                        for user in channel.get_users(): # TODO: this will get users that just joined the channel
+                            user_name = user["name"]
+                            if self.scrobbler.is_authenticated(user_name):
+                                self.scrobbler.scrobble_track(user_name, next_song.artist, next_song.title, int(time()) - next_song.duration) # needs timestamp of when song started
 
                 self.current_song = None
                 self.remove_song(next_song)
