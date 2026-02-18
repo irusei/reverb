@@ -129,4 +129,3 @@ def clean_title(text: str) -> str:
         + TRIM_SYMBOLS_FILTER_RULES
     )
     return apply_filter_rules(combined, text).strip()
-print(clean_title("Yeat - [ADL IS COMING]"))
