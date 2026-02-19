@@ -172,13 +172,6 @@ class Reverb:
                 channel.send_text_message(
                     "Now playing: %s - %s [%s]" % (next_song.artist, next_song.title, self.utils.format_duration(next_song.duration)))
 
-                # scrobble tracks for authenticated users
-                if next_song.duration > 30: # per last.fm guidelines
-                    for user in channel.get_users():
-                        user_name = user["name"]
-                        if self.scrobbler.is_authenticated(user_name):
-                            self.scrobbler.update_now_playing(user_name, next_song.artist, next_song.title, next_song.duration)
-
                 sound = sp.Popen(command, stdout=sp.PIPE, stderr=sp.DEVNULL, bufsize=1024)
                 while True:
                     raw_music = sound.stdout.read(1024)
@@ -187,6 +180,18 @@ class Reverb:
                         break
 
                     self.mumble.sound_output.add_sound(raw_music)
+
+                # last.fm things
+                scrobble_timer = min(240, next_song.duration / 2)
+                scrobble_time = int(time()) + scrobble_timer
+                should_scrobble = next_song.duration >= 30 # according to last.fm guidelines
+
+                # update now playing
+                if should_scrobble:
+                    for user in channel.get_users():
+                        user_name = user["name"]
+                        if self.scrobbler.is_authenticated(user_name):
+                            self.scrobbler.update_now_playing(user_name, next_song.artist, next_song.title, next_song.duration)
 
                 pause_buffer = None
                 while pause_buffer is not None or self.mumble.sound_output.get_buffer_size() > 0.5:
@@ -206,16 +211,16 @@ class Reverb:
                         sound.kill()
                         break
 
-                    sleep(0.01)
-
-                # check if song didn't get skipped and it finished (current_song should not be None in that case)
-                # ideally this should scrobble after half of the song but it's good enough
-                if self.current_song is not None:
-                    if next_song.duration > 30:  # per last.fm guidelines
-                        for user in channel.get_users(): # TODO: this will get users that just joined the channel
+                    # check if track should be scrobbled
+                    if should_scrobble and int(time()) >= scrobble_time:
+                        should_scrobble = False # already scrobbled
+                        for user in channel.get_users():  # TODO: this will get users that just joined the channel
                             user_name = user["name"]
                             if self.scrobbler.is_authenticated(user_name):
-                                self.scrobbler.scrobble_track(user_name, next_song.artist, next_song.title, int(time()) - next_song.duration) # needs timestamp of when song started
+                                self.scrobbler.scrobble_track(user_name, next_song.artist, next_song.title,
+                                                              int(time()) - scrobble_timer)
+
+                    sleep(0.01)
 
                 self.current_song = None
                 self.remove_song(next_song)
