@@ -24,8 +24,8 @@ PORT = int(os.getenv('PORT'))
 PASSWORD = os.getenv('PASSWORD')
 USER_NAME = os.getenv('USER_NAME')
 
-LAST_FM_API_KEY = os.getenv('LAST_FM_API_KEY')
-LAST_FM_API_SECRET = os.getenv('LAST_FM_API_SECRET')
+LAST_FM_API_KEY = os.getenv('LAST_FM_API_KEY') or None
+LAST_FM_API_SECRET = os.getenv('LAST_FM_API_SECRET') or None
 
 def prepare_folders():
     os.makedirs("./cache", exist_ok=True)
@@ -42,7 +42,6 @@ class Reverb:
         self.current_song = None
         self.commands: dict[str, Command] = dict()
         self.paused = False
-        # TODO: make the api keys optional
         self.scrobbler = Scrobbler(LAST_FM_API_KEY, LAST_FM_API_SECRET)
         self.mumble.start()
         self.mumble.is_ready()
@@ -184,7 +183,7 @@ class Reverb:
                 # last.fm things
                 scrobble_timer = min(240, next_song.duration / 2)
                 scrobble_time = int(time()) + scrobble_timer
-                should_scrobble = next_song.duration >= 30 # according to last.fm guidelines
+                should_scrobble = self.scrobbler.enabled and next_song.duration >= 30 # according to last.fm guidelines
 
                 # update now playing
                 if should_scrobble:
