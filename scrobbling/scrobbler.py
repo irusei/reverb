@@ -48,7 +48,7 @@ class Scrobbler:
 
         self.log.debug("saving session tokens")
         with open(self.session_store_filename, "w", encoding="utf-8") as f:
-            json.dump(self.session_tokens, f, indent=4)
+            json.dump({k: v for k, v in self.session_tokens.items() if v is not None}, f, indent=4)
 
     def add_session_token(self, user, token):
         if not self.enabled:
@@ -56,6 +56,14 @@ class Scrobbler:
 
         self.log.debug("adding a session token for %s" % user)
         self.session_tokens[user] = token
+        self.save_session_tokens()
+
+    def remove_session_token(self, user):
+        if not self.enabled:
+            return
+
+        self.log.debug("removing session token for %s" % user)
+        self.session_tokens.pop(user, None)
         self.save_session_tokens()
 
     # increment timer
@@ -93,7 +101,7 @@ class Scrobbler:
         if not self.enabled:
             return False
 
-        return user in self.session_tokens
+        return user in self.session_tokens and self.session_tokens[user] is not None
 
     def get_session_key(self, user):
         if not self.enabled:
@@ -112,13 +120,20 @@ class Scrobbler:
         # this code will only work if user authenticated but we have no way of checking that
         try:
             session_token = self.api.get_session_token(self.get_user_token(user)) # This could error if user is slow enough
-            pass
+            if "error" in session_token:
+                return
 
             self.add_session_token(user, session_token)
 
 
         except Exception as e:
             traceback.print_exception(e)
+
+    def deauth(self, user):
+        if not self.enabled:
+            return
+
+        self.remove_session_token(user)
 
     def update_now_playing(self, user, artist, track, duration):
         if not self.enabled:
