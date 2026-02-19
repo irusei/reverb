@@ -17,17 +17,20 @@ def search_youtube_and_add_to_queue(reverb, query, limit=1):
 
     skip_first = False
 
-    if is_url:
+    if is_url and is_playlist:
         # parse first video if it's a playlist for quicker playback
         with yt_dlp.YoutubeDL({
             **ytdl_options,
-            "noplaylist": True
+            "noplaylist": True,
+            "extract_flat": True
         }) as yt:
             info = yt.extract_info(yt_query, download=False)
-            entries = info.get("entries", [info])
+            entry = info.get("entries", [info])[0]
 
-            for entry in entries:
-                reverb.metadata_queue.append(YoutubeSong(entry))
+            with yt_dlp.YoutubeDL(ytdl_options) as yt_2:
+                info_2 = yt_2.extract_info(entry["url"], download=False)
+                entry_2 = info_2.get("entries", [info_2])[0]
+                reverb.metadata_queue.append(YoutubeSong(entry_2))
 
         skip_first = True
 
