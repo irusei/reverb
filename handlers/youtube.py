@@ -1,30 +1,54 @@
 import yt_dlp
 
-def search_youtube(query, limit=1):
+import utils
+from metadata.youtubesong import YoutubeSong
+
+def search_youtube_and_add_to_queue(reverb, query, limit=1):
+    is_url = utils.is_url(query)
+    is_playlist = "list=" in query or "/sets/" in query
+
     ytdl_options = {
         "quiet": True,
         "skip_download": True,
-        "extract_flat": True
+        "extract_flat": not is_playlist
     }
 
-    yt_query = f"ytsearch{limit}:{query}"
-    if "https://" in query or "http://" in query:
-        yt_query = query
+    yt_query = f"ytsearch{limit}:{query}" if not is_url else query
 
-        if "list=" in query or "/sets/" in query:
-            ytdl_options["extract_flat"] = False
+    skip_first = False
 
-    with yt_dlp.YoutubeDL(ytdl_options) as ytdlp:
-        info = ytdlp.extract_info(yt_query, download=False)
-        if "entries" in info:
-            return list(info["entries"])
-        else:
-            return [info]
+    if is_url:
+        # parse first video if it's a playlist for quicker playback
+        with yt_dlp.YoutubeDL({
+            **ytdl_options,
+            "noplaylist": True
+        }) as yt:
+            info = yt.extract_info(yt_query, download=False)
+            entries = info.get("entries", [info])
+
+            for entry in entries:
+                reverb.metadata_queue.append(YoutubeSong(entry))
+
+        skip_first = True
+
+    with yt_dlp.YoutubeDL(ytdl_options) as yt:
+        info = yt.extract_info(yt_query, download=False)
+        entries = info.get("entries", [info])
+
+        for entry in entries:
+            if skip_first:
+                # skip first video as it's already been parsed before
+                skip_first = False
+                continue
+
+            reverb.metadata_queue.append(YoutubeSong(entry))
 
 def get_source(url, output_path):
     ytdl_options = {
         "format": "bestaudio/best",
         "outtmpl": output_path,
+        "noplaylist": True,
+        "quiet": True,
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",

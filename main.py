@@ -10,6 +10,7 @@ import logging
 import pymumble_py3.constants
 from pymumble_py3.messages import TextMessage
 
+import utils
 from metadata.youtubesong import YoutubeSong
 from reverb_types.song import Song
 from metadata.metadata import Metadata
@@ -112,6 +113,7 @@ class Reverb:
                 continue
 
             id_set = set(song.id for song in self.song_queue)
+            new_songs: set[Song] = set()
 
             # find songs that haven't been downloaded yet
             for unqueued_song in self.metadata_queue.copy():
@@ -131,6 +133,20 @@ class Reverb:
                     song = Song(unqueued_song.id, unqueued_song.artist, unqueued_song.title, unqueued_song.duration, source)
 
                     self.song_queue.append(song)
+                    new_songs.add(song)
+
+            # send queue status update to channel
+            if len(new_songs) > 0:
+                channel = self.mumble.my_channel()
+                queue_diff = "Added:\n"
+
+                for new_song in new_songs:
+                    if new_song in self.song_queue:
+                        queue_diff += "%s - %s [%s] (position %s)\n" % (new_song.artist, new_song.title,
+                                                                        utils.format_duration(new_song.duration),
+                                                                        self.song_queue.index(new_song) + 1)
+
+                channel.send_text_message(queue_diff)
 
     def remove_song(self, song: Song):
         for metadata in self.metadata_queue.copy():
@@ -170,7 +186,7 @@ class Reverb:
                 # broadcast playing
                 channel: pymumble_py3.mumble.channels.Channel = self.mumble.my_channel()
                 channel.send_text_message(
-                    "Now playing: %s - %s [%s]" % (next_song.artist, next_song.title, self.utils.format_duration(next_song.duration)))
+                    "Now playing: %s - %s [%s]" % (next_song.artist, next_song.title, utils.format_duration(next_song.duration)))
 
                 sound = sp.Popen(command, stdout=sp.PIPE, stderr=sp.DEVNULL, bufsize=1024)
                 while True:
@@ -184,7 +200,7 @@ class Reverb:
                 # last.fm things
                 scrobble_timer = min(240, next_song.duration / 2)
                 scrobble_time = int(time()) + scrobble_timer
-                should_scrobble = self.scrobbler.enabled and next_song.duration >= 30 # according to last.fm guidelines
+                should_scrobble = self.scrobbler.enabled and next_song.duration > 30 # according to last.fm guidelines
 
                 # update now playing
                 if should_scrobble:
