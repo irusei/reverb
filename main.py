@@ -42,6 +42,7 @@ class Reverb:
         self.current_song = None
         self.commands: dict[str, Command] = dict()
         self.paused = False
+        self.volume = -25
         self.scrobbler = Scrobbler(LAST_FM_API_KEY, LAST_FM_API_SECRET)
         self.mumble.start()
         self.mumble.is_ready()
@@ -162,7 +163,7 @@ class Reverb:
                     "-f", "s16le",
                     "-ac", "1",
                     "-ar", "48000",
-                    "-af", "aresample=resampler=soxr",
+                    "-af", "aresample=resampler=soxr,volume=%sdB" % str(self.volume),
                     "-"
                 ]
 
