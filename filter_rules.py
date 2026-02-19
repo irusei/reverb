@@ -85,7 +85,7 @@ YOUTUBE_TRACK_FILTER_RULES: List[FilterRule] = [
     (r"^\s+|\s+$", ""),
     (r"\*+\s?\S+\s?\*+$", ""),
     #(r"\[[^\]]+\]", ""),
-    (r"\[(Official|Music Video|Audio|HD|HQ|Lyrics|Explicit)\]", ""),
+    (r"\[(?:Official|Music\sVideo|Audio|HD|HQ|Lyrics|Explicit)[^\]]*\]", ""),
     (r"【[^\]]+】", ""),
     (r"（[^\]]+）", ""),
     (r"\([^)]*version\)$", ""),
