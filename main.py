@@ -83,9 +83,13 @@ class Reverb:
 
     def message_received(self, text: TextMessage):
         user: pymumble.mumble.users.User = self.mumble.users[text.actor]
+
+        if user is self.mumble.users.myself:
+            return
+
         self.log.debug(f"message received from {user['name']}: {text.message}")
 
-        message: str = text.message
+        message: str = text.message.strip()
         # check if is command
         if message.startswith(PREFIX):
             args = message.split(" ")
