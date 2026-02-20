@@ -138,22 +138,23 @@ class Reverb:
             # send queue status update to channel
             if len(new_songs) > 0:
                 channel = self.mumble.my_channel()
-                queue_diff = "Added:\n"
+                queue_diff = "Added:"
 
                 for new_song in new_songs:
                     if new_song in self.song_queue:
-                        queue_diff += "%s - %s [%s] (position %s)\n" % (new_song.artist, new_song.title,
+                        queue_diff += "<br>%s - %s [%s] (position %s)" % (new_song.artist, new_song.title,
                                                                         utils.format_duration(new_song.duration),
                                                                         self.song_queue.index(new_song) + 1)
 
-                channel.send_text_message(queue_diff)
+                channel.send_text_message(queue_diff[:512])
 
     def remove_song(self, song: Song):
         for metadata in self.metadata_queue.copy():
             if metadata.id == song.id:
                 self.metadata_queue.remove(metadata)
 
-        self.song_queue.remove(song)
+        if song in self.song_queue:
+            self.song_queue.remove(song)
 
     def worker_thread(self):
         while True:
