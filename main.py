@@ -44,6 +44,7 @@ class Reverb:
         self.commands: dict[str, Command] = dict()
         self.paused = False
         self.volume = -25
+        self.loop = False
         self.scrobbler = Scrobbler(LAST_FM_API_KEY, LAST_FM_API_SECRET)
         self.mumble.start()
         self.mumble.is_ready()
@@ -152,9 +153,14 @@ class Reverb:
         for metadata in self.metadata_queue.copy():
             if metadata.id == song.id:
                 self.metadata_queue.remove(metadata)
+                if self.loop:
+                    self.metadata_queue.append(metadata) # add back to loop
+                break
 
         if song in self.song_queue:
             self.song_queue.remove(song)
+            if self.loop:
+                self.song_queue.append(song)
 
     def worker_thread(self):
         while True:
