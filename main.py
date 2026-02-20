@@ -10,6 +10,7 @@ import logging
 import pymumble_py3.constants
 from pymumble_py3.messages import TextMessage
 
+import certificate
 import utils
 from metadata.youtubesong import YoutubeSong
 from reverb_types.song import Song
@@ -257,6 +258,9 @@ if __name__ == "__main__":
     from reverb_types.command import Command
     from utils import Utils
 
-    Reverb(pymumble.Mumble(SERVER, USER_NAME, PORT, PASSWORD, reconnect=True))
+    if not os.path.exists("./cert.pem"):
+        certificate.gen_certificate()
+
+    Reverb(pymumble.Mumble(SERVER, USER_NAME, PORT, PASSWORD, reconnect=True, certfile="./cert.pem"))
 
     input()

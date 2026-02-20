@@ -4,3 +4,4 @@ cache
 uv.lock
 .idea
 sessions.json
+cert.pem

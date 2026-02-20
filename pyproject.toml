@@ -7,5 +7,6 @@ dependencies = [
     "dotenv>=0.9.9",
     "pymumble>=1.6.1",
     "yt-dlp>=2026.2.4",
-    "requests"
+    "requests",
+    "cryptography>=46.0.5",
 ]
