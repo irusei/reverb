@@ -3,9 +3,9 @@ import uuid
 from filter_rules import clean_title
 
 def format_title(title):
-    new_title = title
-    if "-" in title:
-        new_title = title.split("-", 1)[1]
+    new_title = title.replace("—","-")
+    if "-" in new_title:
+        new_title = new_title.split("-", 1)[1]
 
     # filter rules
     return clean_title(new_title)
