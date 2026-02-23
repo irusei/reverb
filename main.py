@@ -1,9 +1,17 @@
 import subprocess as sp
 import os
 import threading
+import ctypes.util
 from time import sleep, time
 
 from dotenv import load_dotenv
+
+if "OPUS_LIBRARY" in os.environ:
+    ctypes.util.find_library = lambda name: (
+        os.environ["OPUS_LIBRARY"] if name == "opus"
+        else ctypes.util.find_library(name)
+    )
+
 import pymumble_py3 as pymumble
 import logging
 
