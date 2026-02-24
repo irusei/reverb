@@ -9,4 +9,5 @@ dependencies = [
     "yt-dlp>=2026.2.4",
     "requests",
     "cryptography>=46.0.5",
+    "spotifyscraper>=2.1.5",
 ]

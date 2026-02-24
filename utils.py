@@ -25,6 +25,20 @@ def is_url(text):
     except Exception as e:
         return False
 
+def get_domain_name(url):
+    try:
+        result = urlparse(url)
+        return result.netloc
+    except Exception as e:
+        return None
+
+def is_youtube(url):
+    return is_url(url) and "youtube" in get_domain_name(url)
+
+def is_spotify(url):
+    return is_url(url) and "spotify" in get_domain_name(url)
+
+
 class Utils:
     def __init__(self, reverb):
         self.reverb = reverb
