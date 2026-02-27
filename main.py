@@ -5,6 +5,7 @@ import ctypes.util
 import signal
 from time import sleep, time
 
+import yt_dlp
 from dotenv import load_dotenv
 
 if "OPUS_LIBRARY" in os.environ:
@@ -143,7 +144,13 @@ class Reverb:
                         continue
 
                     source = "./cache/%s" % unqueued_song.id
-                    youtube.get_source(unqueued_song.url, source)
+                    try:
+                        youtube.get_source(unqueued_song.url, source)
+                    except yt_dlp.DownloadError as e:
+                        # remove song
+                        self.metadata_queue.remove(unqueued_song)
+                        self.mumble.my_channel().send_text_message("Failed to download %s - %s: %s" % (unqueued_song.artist, unqueued_song.title, str(e)))
+                        continue
                     source += ".mp3"  # yt-dlp appends .mp3 for some reason
                     song = Song(unqueued_song.id, unqueued_song.artist, unqueued_song.title, unqueued_song.duration, source)
 
