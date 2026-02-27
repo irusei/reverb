@@ -2,6 +2,7 @@ import subprocess as sp
 import os
 import threading
 import ctypes.util
+import signal
 from time import sleep, time
 
 from dotenv import load_dotenv
@@ -271,4 +272,4 @@ if __name__ == "__main__":
 
     Reverb(pymumble.Mumble(SERVER, USER_NAME, PORT, PASSWORD, reconnect=True, certfile="./cert.pem"))
 
-    input()
+    signal.pause()
