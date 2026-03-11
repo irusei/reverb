@@ -1,8 +1,9 @@
 class Song:
-    def __init__(self, id, artist, title, duration, source):
+    def __init__(self, id, artist, title, duration, url):
+        self.id = str(id)
         self.artist = artist
         self.title = title
         self.duration = duration
-        self.source = source
-        self.id = str(id)
+        self.url = url
+        self.source = None
         self.playing = False
