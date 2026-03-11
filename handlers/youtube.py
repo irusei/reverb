@@ -39,7 +39,6 @@ def search_youtube_and_add_to_queue(reverb, query, limit=1):
         info = yt.extract_info(yt_query, download=False)
         entries = info.get("entries", [info])
 
-        print(info)
         for entry in entries:
             if skip_first:
                 # skip first video as it's already been parsed before
