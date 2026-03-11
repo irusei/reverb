@@ -17,6 +17,7 @@ def search_youtube_and_add_to_queue(reverb, query, limit=1):
 
     skip_first = False
 
+    # FIXME: YOUTUBE PLAYLISTS ARE BROKEN!!!!!
     if is_url and is_playlist:
         # parse first video if it's a playlist for quicker playback
         with yt_dlp.YoutubeDL({
@@ -30,7 +31,7 @@ def search_youtube_and_add_to_queue(reverb, query, limit=1):
             with yt_dlp.YoutubeDL(ytdl_options) as yt_2:
                 info_2 = yt_2.extract_info(entry["url"], download=False)
                 entry_2 = info_2.get("entries", [info_2])[0]
-                reverb.metadata_queue.append(YoutubeSong(entry_2))
+                reverb.queue_manager.add_to_metadata_queue(YoutubeSong(entry_2))
 
         skip_first = True
 
@@ -38,13 +39,14 @@ def search_youtube_and_add_to_queue(reverb, query, limit=1):
         info = yt.extract_info(yt_query, download=False)
         entries = info.get("entries", [info])
 
+        print(info)
         for entry in entries:
             if skip_first:
                 # skip first video as it's already been parsed before
                 skip_first = False
                 continue
 
-            reverb.metadata_queue.append(YoutubeSong(entry))
+            reverb.queue_manager.add_to_metadata_queue(YoutubeSong(entry))
 
 def get_source(url, output_path):
     ytdl_options = {

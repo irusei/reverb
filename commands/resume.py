@@ -7,4 +7,4 @@ def run(reverb: Reverb, user: pymumble_py3.users.User, args: list[str]):
         user.send_text_message("You are not in the same channel!")
         return
 
-    reverb.paused = False
+    reverb.queue_manager.resume()

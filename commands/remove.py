@@ -12,18 +12,15 @@ def run(reverb: Reverb, user: pymumble_py3.users.User, args: list[str]):
 
     position = int(args[0])
 
-    if len(reverb.song_queue) < position or position <= 0:
+    if reverb.queue_manager.get_queue_size() < position or position <= 0:
         user.send_text_message("You must provide a valid track position to remove.")
         return
 
-    song = reverb.song_queue[position - 1]
-
-    original_loop = reverb.loop
-    reverb.loop = False
-    reverb.remove_song(song)
-    reverb.loop = original_loop
+    # skip song at position
+    song = reverb.metadata_queue[position - 1]
+    reverb.queue_manager.remove_song(song, remove_from_loop=True)
 
     if position == 1:
-        reverb.current_song = None # skip track
+        reverb.queue_manager.skip_track()
 
     reverb.mumble.my_channel().send_text_message("Track %s - %s has been removed from the queue." % (song.artist, song.title))

@@ -1,11 +1,9 @@
-import subprocess as sp
 import os
 import threading
 import ctypes.util
 import signal
-from time import sleep, time
+from time import time
 
-import yt_dlp
 from dotenv import load_dotenv
 
 if "OPUS_LIBRARY" in os.environ:
@@ -21,12 +19,8 @@ import pymumble_py3.constants
 from pymumble_py3.messages import TextMessage
 
 import certificate
-import utils
-from metadata.youtubesong import YoutubeSong
 from reverb_types.song import Song
-from metadata.metadata import Metadata
-
-import handlers.youtube as youtube
+from managers import QueueManager, ConverterManager
 from scrobbling.scrobbler import Scrobbler
 
 load_dotenv()
@@ -49,14 +43,17 @@ class Reverb:
         self.log.setLevel(logging.DEBUG)
         self.utils = Utils(self)
         self.mumble: pymumble.Mumble = mumble
-        self.metadata_queue: list[Metadata] = []
+        self.metadata_queue: list[Song] = []
         self.song_queue: list[Song] = []
         self.current_song = None
+        self.channel_join_times: dict[str, float] = {}  # user_name -> channel join timestamp
         self.commands: dict[str, Command] = dict()
         self.paused = False
         self.volume = -25
         self.loop = False
         self.scrobbler = Scrobbler(LAST_FM_API_KEY, LAST_FM_API_SECRET)
+        self.queue_manager = QueueManager(self)
+        self.converter_manager = ConverterManager(self)
         self.mumble.start()
         self.mumble.is_ready()
 
@@ -68,11 +65,20 @@ class Reverb:
         # callbacks
         self.mumble.callbacks.set_callback(pymumble_py3.constants.PYMUMBLE_CLBK_TEXTMESSAGERECEIVED,
                                            self.message_received)
+        self.mumble.callbacks.set_callback(pymumble_py3.constants.PYMUMBLE_CLBK_USERUPDATED,
+                                           self.user_updated)
+        self.mumble.callbacks.set_callback(pymumble_py3.constants.PYMUMBLE_CLBK_USERCREATED,
+                                           self.user_updated)
 
-        worker_thread = threading.Thread(target=self.worker_thread, daemon=True)
+        # run user_updated for each user present in channel
+        my_channel: pymumble_py3.mumble.channels.Channel = mumble.my_channel()
+        for user in my_channel.get_users():
+            self.user_updated(user)
+
+        worker_thread = threading.Thread(target=self.queue_manager.worker_thread, daemon=True)
         worker_thread.start()
 
-        converter_thread = threading.Thread(target=self.converter_thread, daemon=True)
+        converter_thread = threading.Thread(target=self.converter_manager.run, daemon=True)
         converter_thread.start()
 
     def register_commands(self):
@@ -110,6 +116,11 @@ class Reverb:
             # handle command
             self.handle_command(user, command, args)
 
+    def user_updated(self, user_state: dict):
+        user_name = user_state.get("name")
+        if user_name:
+            self.channel_join_times[user_name] = time()
+
     def clear_cache(self, full=False):
         for file_name in os.listdir("./cache"):
             no_extension = os.path.splitext(file_name)[0]
@@ -120,154 +131,6 @@ class Reverb:
                     os.remove(os.path.join("./cache", file_name))
             else:
                 os.remove(os.path.join("./cache", file_name))
-
-
-    def converter_thread(self):
-        while True:
-            if len(self.metadata_queue) == 0:
-                sleep(0.01)
-                continue
-
-            id_set = set(song.id for song in self.song_queue)
-            new_songs: set[Song] = set()
-
-            # find songs that haven't been downloaded yet
-            for unqueued_song in self.metadata_queue.copy():
-                if unqueued_song.id in id_set:
-                    sleep(0.01)
-                    continue
-
-                # Convert to "Song" class
-                if isinstance(unqueued_song, YoutubeSong):
-                    if unqueued_song.url is None:
-                        self.metadata_queue.remove(unqueued_song)
-                        continue
-
-                    source = "./cache/%s" % unqueued_song.id
-                    try:
-                        youtube.get_source(unqueued_song.url, source)
-                    except yt_dlp.DownloadError as e:
-                        # remove song
-                        self.metadata_queue.remove(unqueued_song)
-                        self.mumble.my_channel().send_text_message("Failed to download %s - %s: %s" % (unqueued_song.artist, unqueued_song.title, str(e)))
-                        continue
-                    source += ".mp3"  # yt-dlp appends .mp3 for some reason
-                    song = Song(unqueued_song.id, unqueued_song.artist, unqueued_song.title, unqueued_song.duration, source)
-
-                    self.song_queue.append(song)
-                    new_songs.add(song)
-
-            # send queue status update to channel
-            if len(new_songs) > 0:
-                channel = self.mumble.my_channel()
-                queue_diff = "Added:"
-
-                for new_song in new_songs:
-                    if new_song in self.song_queue:
-                        queue_diff += "<br>%s - %s [%s] (position %s)" % (new_song.artist, new_song.title,
-                                                                        utils.format_duration(new_song.duration),
-                                                                        self.song_queue.index(new_song) + 1)
-
-                channel.send_text_message(queue_diff[:512])
-
-    def remove_song(self, song: Song):
-        for metadata in self.metadata_queue.copy():
-            if metadata.id == song.id:
-                self.metadata_queue.remove(metadata)
-                if self.loop:
-                    self.metadata_queue.append(metadata) # add back to loop
-                break
-
-        if song in self.song_queue:
-            self.song_queue.remove(song)
-            if self.loop:
-                self.song_queue.append(song)
-
-    def worker_thread(self):
-        while True:
-            if self.current_song is None:
-                if len(self.song_queue) == 0:
-                    sleep(0.01)
-                    continue
-
-                # clear cache
-                self.clear_cache()
-
-                next_song = self.song_queue[0]
-
-                if next_song is None:
-                    continue
-
-                self.current_song = next_song
-
-                # play song
-                command = [
-                    "ffmpeg",
-                    "-i", next_song.source,
-                    "-f", "s16le",
-                    "-ac", "1",
-                    "-ar", "48000",
-                    "-af", "aresample=resampler=soxr,volume=%sdB" % str(self.volume),
-                    "-"
-                ]
-
-                # broadcast playing
-                channel: pymumble_py3.mumble.channels.Channel = self.mumble.my_channel()
-                channel.send_text_message(
-                    "Now playing: %s - %s [%s]" % (next_song.artist, next_song.title, utils.format_duration(next_song.duration)))
-
-                sound = sp.Popen(command, stdout=sp.PIPE, stderr=sp.DEVNULL, bufsize=1024)
-                while True:
-                    raw_music = sound.stdout.read(1024)
-                    if not raw_music:
-                        sound.kill()
-                        break
-
-                    self.mumble.sound_output.add_sound(raw_music)
-
-                # last.fm things
-                scrobble_timer = min(240, next_song.duration / 2)
-                scrobble_time = int(time()) + scrobble_timer
-                should_scrobble = self.scrobbler.enabled and next_song.duration > 30 # according to last.fm guidelines
-
-                # update now playing
-                if should_scrobble:
-                    for user in channel.get_users():
-                        user_name = user["name"]
-                        if self.scrobbler.is_authenticated(user_name):
-                            self.scrobbler.update_now_playing(user_name, next_song.artist, next_song.title, next_song.duration)
-
-                pause_buffer = None
-                while pause_buffer is not None or self.mumble.sound_output.get_buffer_size() > 0.5:
-                    if self.paused and pause_buffer is None:
-                        pause_buffer = self.mumble.sound_output.pcm
-                        self.mumble.sound_output.clear_buffer()
-                        sleep(0.01)
-                        continue
-
-                    if not self.paused and pause_buffer is not None:
-                        self.mumble.sound_output.pcm = pause_buffer
-                        pause_buffer = None
-
-                    if self.current_song is None:
-                        self.paused = False # resume song
-                        self.mumble.sound_output.clear_buffer()
-                        sound.kill()
-                        break
-
-                    # check if track should be scrobbled
-                    if should_scrobble and int(time()) >= scrobble_time:
-                        should_scrobble = False # already scrobbled
-                        for user in channel.get_users():  # TODO: this will get users that just joined the channel
-                            user_name = user["name"]
-                            if self.scrobbler.is_authenticated(user_name):
-                                self.scrobbler.scrobble_track(user_name, next_song.artist, next_song.title,
-                                                              int(time()) - scrobble_timer)
-
-                    sleep(0.01)
-
-                self.current_song = None
-                self.remove_song(next_song)
 
 
 if __name__ == "__main__":
