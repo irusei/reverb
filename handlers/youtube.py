@@ -1,7 +1,7 @@
 import yt_dlp
 
 import utils
-from reverb_types.youtubesong import YoutubeSong
+from metadata.youtubesong import YoutubeSong
 
 def search_youtube_and_add_to_queue(reverb, query, limit=1):
     is_url = utils.is_url(query)

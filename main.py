@@ -22,7 +22,9 @@ from pymumble_py3.messages import TextMessage
 
 import certificate
 import utils
+from metadata.youtubesong import YoutubeSong
 from reverb_types.song import Song
+from metadata.metadata import Metadata
 
 import handlers.youtube as youtube
 from scrobbling.scrobbler import Scrobbler
@@ -47,10 +49,9 @@ class Reverb:
         self.log.setLevel(logging.DEBUG)
         self.utils = Utils(self)
         self.mumble: pymumble.Mumble = mumble
-        self.metadata_queue: list[Song] = []
+        self.metadata_queue: list[Metadata] = []
         self.song_queue: list[Song] = []
         self.current_song = None
-        self.channel_join_times: dict[str, float] = {}  # user_name -> channel join timestamp
         self.commands: dict[str, Command] = dict()
         self.paused = False
         self.volume = -25
@@ -67,15 +68,6 @@ class Reverb:
         # callbacks
         self.mumble.callbacks.set_callback(pymumble_py3.constants.PYMUMBLE_CLBK_TEXTMESSAGERECEIVED,
                                            self.message_received)
-        self.mumble.callbacks.set_callback(pymumble_py3.constants.PYMUMBLE_CLBK_USERUPDATED,
-                                           self.user_updated)
-        self.mumble.callbacks.set_callback(pymumble_py3.constants.PYMUMBLE_CLBK_USERCREATED,
-                                           self.user_updated)
-
-        # run user_updated for each user present in channel
-        my_channel: pymumble_py3.mumble.channels.Channel = mumble.my_channel()
-        for user in my_channel.get_users():
-            self.user_updated(user)
 
         worker_thread = threading.Thread(target=self.worker_thread, daemon=True)
         worker_thread.start()
@@ -118,11 +110,6 @@ class Reverb:
             # handle command
             self.handle_command(user, command, args)
 
-    def user_updated(self, user_state: dict):
-        user_name = user_state.get("name")
-        if user_name:
-            self.channel_join_times[user_name] = time()
-
     def clear_cache(self, full=False):
         for file_name in os.listdir("./cache"):
             no_extension = os.path.splitext(file_name)[0]
@@ -150,23 +137,25 @@ class Reverb:
                     sleep(0.01)
                     continue
 
-                if unqueued_song.url is None:
-                    self.metadata_queue.remove(unqueued_song)
-                    continue
+                # Convert to "Song" class
+                if isinstance(unqueued_song, YoutubeSong):
+                    if unqueued_song.url is None:
+                        self.metadata_queue.remove(unqueued_song)
+                        continue
 
-                source = "./cache/%s" % unqueued_song.id
-                try:
-                    youtube.get_source(unqueued_song.url, source)
-                except yt_dlp.DownloadError as e:
-                    self.metadata_queue.remove(unqueued_song)
-                    self.mumble.my_channel().send_text_message("Failed to download %s - %s: %s" % (unqueued_song.artist, unqueued_song.title, str(e)))
-                    continue
-                source += ".mp3"  # yt-dlp appends .mp3 for some reason
-                unqueued_song.source = source
-                unqueued_song.id = unqueued_song.id or str(uuid.uuid4())
+                    source = "./cache/%s" % unqueued_song.id
+                    try:
+                        youtube.get_source(unqueued_song.url, source)
+                    except yt_dlp.DownloadError as e:
+                        # remove song
+                        self.metadata_queue.remove(unqueued_song)
+                        self.mumble.my_channel().send_text_message("Failed to download %s - %s: %s" % (unqueued_song.artist, unqueued_song.title, str(e)))
+                        continue
+                    source += ".mp3"  # yt-dlp appends .mp3 for some reason
+                    song = Song(unqueued_song.id, unqueued_song.artist, unqueued_song.title, unqueued_song.duration, source)
 
-                self.song_queue.append(unqueued_song)
-                new_songs.add(unqueued_song)
+                    self.song_queue.append(song)
+                    new_songs.add(song)
 
             # send queue status update to channel
             if len(new_songs) > 0:
@@ -210,7 +199,6 @@ class Reverb:
                     continue
 
                 self.current_song = next_song
-                song_start_time = time()
 
                 # play song
                 command = [
@@ -269,15 +257,12 @@ class Reverb:
 
                     # check if track should be scrobbled
                     if should_scrobble and int(time()) >= scrobble_time:
-                        should_scrobble = False  # already scrobbled
-                        for user in channel.get_users():
+                        should_scrobble = False # already scrobbled
+                        for user in channel.get_users():  # TODO: this will get users that just joined the channel
                             user_name = user["name"]
-                            # only scrobble for users who were in the channel when song started
-                            if user_name in self.channel_join_times:
-                                if self.channel_join_times[user_name] <= song_start_time:
-                                    if self.scrobbler.is_authenticated(user_name):
-                                        self.scrobbler.scrobble_track(user_name, next_song.artist, next_song.title,
-                                                                      int(time()) - scrobble_timer)
+                            if self.scrobbler.is_authenticated(user_name):
+                                self.scrobbler.scrobble_track(user_name, next_song.artist, next_song.title,
+                                                              int(time()) - scrobble_timer)
 
                     sleep(0.01)
 
@@ -288,7 +273,6 @@ class Reverb:
 if __name__ == "__main__":
     from reverb_types.command import Command
     from utils import Utils
-    import uuid
 
     if not os.path.exists("./cert.pem"):
         certificate.gen_certificate()
