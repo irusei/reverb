@@ -116,7 +116,7 @@ class Reverb:
             # handle command
             self.handle_command(user, command, args)
 
-    def user_updated(self, user_state: dict):
+    def user_updated(self, user_state: dict, modified_fields: dict = None):
         user_name = user_state.get("name")
         if user_name:
             self.channel_join_times[user_name] = time()
