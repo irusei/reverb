@@ -7,6 +7,9 @@ from handlers.youtube import search_youtube_and_add_to_queue
 from main import Reverb
 from utils import is_spotify
 
+description = "Play a song"
+usage = "play <url|query>"
+
 
 def run(reverb: Reverb, user: pymumble_py3.users.User, args: list[str]):
     if not reverb.utils.is_in_same_channel(user):

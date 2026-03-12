@@ -2,6 +2,9 @@ import pymumble_py3.users
 import utils
 from main import Reverb
 
+description = "Display the current queue"
+usage = "queue"
+
 
 def run(reverb: Reverb, user: pymumble_py3.users.User, args: list[str]):
     if not reverb.utils.is_in_same_channel(user):

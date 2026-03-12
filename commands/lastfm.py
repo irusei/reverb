@@ -2,6 +2,9 @@ import pymumble_py3.users
 
 from main import Reverb
 
+description = "Manage last.fm integration"
+usage = "lastfm [connect|disconnect|done]"
+
 def run(reverb: Reverb, user: pymumble_py3.users.User, args: list[str]):
     if not reverb.scrobbler.enabled:
         user.send_text_message("last.fm integration is disabled on the bot")
