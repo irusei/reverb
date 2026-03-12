@@ -1,5 +1,6 @@
 import subprocess as sp
 import uuid
+import threading
 from time import sleep, time
 
 from yt_dlp import DownloadError
@@ -108,7 +109,7 @@ class QueueManager:
 
                 channel = self.reverb.mumble.my_channel()
                 channel.send_text_message(
-                    "Now playing: %s - %s [%s]" % (next_song.artist, next_song.title, utils.format_duration(next_song.duration)))
+                    "<br><b>Now Playing</b><br><font size=\"5\" color=\"#4CAF50\">%s - %s</font><br><i>[%s]</i>" % (next_song.artist, next_song.title, utils.format_duration(next_song.duration)))
 
                 sound = sp.Popen(command, stdout=sp.PIPE, stderr=sp.DEVNULL, bufsize=1024)
                 while True:
@@ -173,6 +174,24 @@ class ConverterManager:
         self.reverb = reverb
         self.log = reverb.log
 
+    def _download_song(self, unqueued_song):
+        unqueued_song.id = str(uuid.uuid4())
+        source = "./cache/%s" % unqueued_song.id
+
+        try:
+            youtube.get_source(unqueued_song.url, source)
+        except DownloadError as e:
+            self.reverb.metadata_queue.remove(unqueued_song)
+            channel = self.reverb.mumble.my_channel()
+            channel.send_text_message(
+                f"Failed to download {unqueued_song.artist} - {unqueued_song.title}: {str(e)}")
+            return
+
+        source += ".flac"
+        unqueued_song.source = source
+
+        self.reverb.song_queue.append(unqueued_song)
+
     def run(self):
         while True:
             if len(self.reverb.metadata_queue) == 0:
@@ -181,6 +200,7 @@ class ConverterManager:
 
             id_set = set(song.id for song in self.reverb.song_queue)
             new_songs = set()
+            threads = []
 
             for unqueued_song in self.reverb.metadata_queue.copy():
                 if unqueued_song.id in id_set:
@@ -191,22 +211,12 @@ class ConverterManager:
                     self.reverb.metadata_queue.remove(unqueued_song)
                     continue
 
-                unqueued_song.id = str(uuid.uuid4())
-                source = "./cache/%s" % unqueued_song.id
+                thread = threading.Thread(target=self._download_song, args=(unqueued_song,))
+                thread.start()
+                threads.append((thread, unqueued_song))
 
-                try:
-                    youtube.get_source(unqueued_song.url, source)
-                except DownloadError as e:
-                    self.reverb.metadata_queue.remove(unqueued_song)
-                    channel = self.reverb.mumble.my_channel()
-                    channel.send_text_message(
-                        f"Failed to download {unqueued_song.artist} - {unqueued_song.title}: {str(e)}")
-                    continue
-
-                source += ".flac"
-                unqueued_song.source = source
-
-                self.reverb.song_queue.append(unqueued_song)
+            for thread, unqueued_song in threads:
+                thread.join()
                 new_songs.add(unqueued_song)
 
             if len(new_songs) > 0:
