@@ -209,9 +209,8 @@ class ConverterManager:
                 channel = self.reverb.mumble.my_channel()
                 queue_diff = "Added:"
 
-                for new_song in new_songs:
-                    if new_song in self.reverb.song_queue:
-                        pos = self.reverb.song_queue.index(new_song) + 1
-                        queue_diff += f"<br>{new_song.artist} - {new_song.title} [{utils.format_duration(new_song.duration)}] (position {pos})"
+                for idx, song in enumerate(self.reverb.song_queue):
+                    if song in new_songs:
+                        queue_diff += f"<br>{song.artist} - {song.title} [{utils.format_duration(song.duration)}] (position {idx + 1})"
 
                 channel.send_text_message(queue_diff[:512])
