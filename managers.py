@@ -76,6 +76,10 @@ class QueueManager:
         self.reverb.song_queue.clear()
         self.reverb.current_song = None
 
+    def shuffle_queue(self):
+        import random
+        random.shuffle(self.reverb.song_queue)
+
     def worker_thread(self):
         while True:
             if self.reverb.current_song is None:
@@ -199,7 +203,7 @@ class ConverterManager:
                         f"Failed to download {unqueued_song.artist} - {unqueued_song.title}: {str(e)}")
                     continue
 
-                source += ".mp3"
+                source += ".flac"
                 unqueued_song.source = source
 
                 self.reverb.song_queue.append(unqueued_song)

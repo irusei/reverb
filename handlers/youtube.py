@@ -55,7 +55,7 @@ def get_source(url, output_path):
         "quiet": True,
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
+            "preferredcodec": "flac",
             "preferredquality": "0",
         }],
     }
