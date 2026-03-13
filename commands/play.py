@@ -9,7 +9,7 @@ from utils import is_spotify
 
 description = "Play a song"
 usage = "play <url|query>"
-
+aliases = ['p']
 
 def run(reverb: Reverb, user: pymumble_py3.users.User, args: list[str]):
     if not reverb.utils.is_in_same_channel(user):

@@ -91,6 +91,14 @@ class Reverb:
                 self.commands[command_name] = Command(command_name)
                 self.log.debug(f"registered command {command_name}")
 
+                # handle aliases
+                # add all aliases to the list because why not, makes things easier i think
+                aliases = self.commands[command_name].aliases
+                if aliases is not None:
+                    for alias in aliases:
+                        self.commands[alias] = self.commands[command_name]
+                        self.log.debug(f"registered alias {alias}")
+
     def handle_command(self, user: pymumble.mumble.users.User, command: str, args: list[str]):
         # check if command exists
         if command in self.commands:
