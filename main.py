@@ -40,6 +40,7 @@ class Reverb:
     def __init__(self, mumble: pymumble.Mumble):
         self.log = logging.getLogger("bot")
         logging.basicConfig(level=logging.DEBUG)
+        self.prefix = PREFIX
         self.log.setLevel(logging.DEBUG)
         self.utils = Utils(self)
         self.mumble: pymumble.Mumble = mumble
@@ -108,7 +109,7 @@ class Reverb:
 
         message: str = text.message.strip()
         # check if is command
-        if message.startswith(PREFIX):
+        if message.startswith(self.prefix):
             args = message.split(" ")
             command = args[0]
             args.remove(command)
