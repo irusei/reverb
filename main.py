@@ -20,7 +20,7 @@ from pymumble_py3.messages import TextMessage
 
 import certificate
 from reverb_types.song import Song
-from managers import QueueManager, ConverterManager
+from managers import QueueManager, ConverterManager, SocketManager
 from scrobbling.scrobbler import Scrobbler
 
 load_dotenv()
@@ -32,6 +32,10 @@ USER_NAME = os.getenv('USER_NAME')
 
 LAST_FM_API_KEY = os.getenv('LAST_FM_API_KEY') or None
 LAST_FM_API_SECRET = os.getenv('LAST_FM_API_SECRET') or None
+
+SOCKET_HOST = os.getenv('SOCKET_HOST') or None
+SOCKET_PORT = os.getenv('SOCKET_PORT') or None
+SOCKET_AUTH = os.getenv('SOCKET_AUTH') or None
 
 def prepare_folders():
     os.makedirs("./cache", exist_ok=True)
@@ -81,6 +85,12 @@ class Reverb:
 
         converter_thread = threading.Thread(target=self.converter_manager.run, daemon=True)
         converter_thread.start()
+
+        self.socket_manager = None
+        if SOCKET_HOST and SOCKET_PORT and SOCKET_AUTH:
+            self.socket_manager = SocketManager(self, host=SOCKET_HOST, port=SOCKET_PORT, auth_key=SOCKET_AUTH)
+            socket_thread = threading.Thread(target=self.socket_manager.run, daemon=True)
+            socket_thread.start()
 
     def register_commands(self):
         folder = "./commands"

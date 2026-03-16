@@ -20,7 +20,7 @@ def run(reverb: Reverb, user: pymumble_py3.users.User, args: list[str]):
         return
 
     # skip song at position
-    song = reverb.metadata_queue[position - 1]
+    song = reverb.song_queue[position - 1]
     reverb.queue_manager.remove_song(song, remove_from_loop=True)
 
     if position == 1:

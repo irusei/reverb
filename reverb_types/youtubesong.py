@@ -16,6 +16,12 @@ def format_artist(title, uploader):
 
     return artist_name
 
+def format_title(title):
+    new_title = title.replace("—","-")
+    if "-" in new_title:
+        new_title = new_title.split("-", 1)[1]
+    return clean_title(new_title)
+
 class YoutubeSong(Song):
     def __init__(self, yt_dlp_results):
         title = yt_dlp_results.get("title")
@@ -31,8 +37,11 @@ class YoutubeSong(Song):
             url=url
         )
 
-def format_title(title):
-    new_title = title.replace("—","-")
-    if "-" in new_title:
-        new_title = new_title.split("-", 1)[1]
-    return clean_title(new_title)
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "artist": self.artist,
+            "title": self.title,
+            "duration": self.duration,
+            "url": self.url
+        }

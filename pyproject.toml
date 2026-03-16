@@ -10,4 +10,5 @@ dependencies = [
     "requests",
     "cryptography>=46.0.5",
     "spotifyscraper>=2.1.5",
+    "websockets>=16.0",
 ]

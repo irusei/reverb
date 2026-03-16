@@ -5,3 +5,5 @@ uv.lock
 .idea
 sessions.json
 cert.pem
+
+__pycache__

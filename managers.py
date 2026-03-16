@@ -1,16 +1,25 @@
+import asyncio
+import json
+import socket
 import subprocess as sp
 import uuid
 import threading
+from json import JSONDecodeError
 from time import sleep, time
 
+import websockets
 from yt_dlp import DownloadError
 
 import handlers.youtube as youtube
 import utils
+from handlers.spotify import parse_spotify
+from handlers.youtube import search_youtube_and_add_to_queue
+from utils import is_spotify
 
 
 class QueueManager:
     def __init__(self, reverb):
+        self.song_start_time = None
         self.reverb = reverb
         self.log = reverb.log
 
@@ -18,6 +27,9 @@ class QueueManager:
         if self.reverb.current_song:
             self.remove_song(self.reverb.current_song, remove_from_loop=remove_from_loop)
             self.reverb.current_song = None
+
+        if self.reverb.socket_manager is not None:
+            self.reverb.socket_manager.announce()
 
     def set_loop(self, loop):
         self.reverb.loop = loop
@@ -27,6 +39,8 @@ class QueueManager:
 
     def toggle_loop(self):
         self.set_loop(not self.reverb.loop)
+        if self.reverb.socket_manager is not None:
+            self.reverb.socket_manager.announce()
 
     def pause(self):
         self.reverb.paused = True
@@ -39,6 +53,9 @@ class QueueManager:
             self.resume()
         else:
             self.pause()
+
+        if self.reverb.socket_manager is not None:
+            self.reverb.socket_manager.announce()
 
     def get_queue(self):
         return self.reverb.song_queue.copy()
@@ -65,6 +82,9 @@ class QueueManager:
             if self.reverb.loop and not remove_from_loop:
                 self.reverb.song_queue.append(song)
 
+        if self.reverb.socket_manager is not None:
+            self.reverb.socket_manager.announce()
+
     def add_to_metadata_queue(self, song):
         id_set = set(s.id for s in self.reverb.song_queue)
         if song.id in id_set:
@@ -80,6 +100,8 @@ class QueueManager:
     def shuffle_queue(self):
         import random
         random.shuffle(self.reverb.song_queue)
+        if self.reverb.socket_manager is not None:
+            self.reverb.socket_manager.announce()
 
     def worker_thread(self):
         while True:
@@ -95,7 +117,7 @@ class QueueManager:
                     continue
 
                 self.reverb.current_song = next_song
-                song_start_time = time()
+                self.song_start_time = time()
 
                 command = [
                     "ffmpeg",
@@ -132,6 +154,9 @@ class QueueManager:
                         if self.reverb.scrobbler.is_authenticated(user_name):
                             self.reverb.scrobbler.update_now_playing(user_name, next_song.artist, next_song.title, next_song.duration)
 
+                if self.reverb.socket_manager is not None:
+                    self.reverb.socket_manager.announce()
+
                 pause_buffer = None
                 while pause_buffer is not None or self.reverb.mumble.sound_output.get_buffer_size() > 0.5:
                     if self.reverb.paused and pause_buffer is None:
@@ -158,7 +183,7 @@ class QueueManager:
                             user_name = user["name"]
                             # only scrobble for users who were in the channel when song started
                             if user_name in self.reverb.channel_join_times:
-                                if self.reverb.channel_join_times[user_name] <= song_start_time:
+                                if self.reverb.channel_join_times[user_name] <= self.song_start_time:
                                     if self.reverb.scrobbler.is_authenticated(user_name):
                                         self.reverb.scrobbler.scrobble_track(user_name, next_song.artist, next_song.title,
                                                                           int(time()) - scrobble_timer)
@@ -166,8 +191,113 @@ class QueueManager:
                     sleep(0.01)
 
                 self.reverb.current_song = None
+                self.song_start_time = None
                 self.remove_song(next_song)
 
+class SocketManager:
+    def __init__(self, reverb, host, port, auth_key):
+        self.reverb = reverb
+        self.log = reverb.log
+        self.sockets = []
+
+        self.host = host
+        self.port = port
+        self.auth_key = auth_key
+
+    async def _announce_async(self):
+        for ws in self.sockets:
+            await ws.send(self.get_state())
+
+    def get_state(self):
+        return json.dumps({
+            "type": "state",
+            "value": {
+                "paused": self.reverb.paused,
+                "song_queue": [song.to_dict() for song in self.reverb.song_queue],
+                "metadata_queue": [metadata.to_dict() for metadata in self.reverb.metadata_queue],
+                "current_song": self.reverb.current_song.to_dict() if self.reverb.current_song is not None else None,
+                "loop": self.reverb.loop,
+                "time": time() - self.reverb.queue_manager.song_start_time if self.reverb.queue_manager.song_start_time is not None else None
+            }
+        })
+
+    async def handler(self, websocket):
+        sent_initial = False
+        self.sockets.append(websocket)
+        async for message in websocket:
+            try:
+                data_json: dict = json.loads(message)
+
+                command_type = data_json.get("type", None)
+                auth = data_json.get("auth", None)
+                args = data_json.get("args", None)
+
+                if auth != self.auth_key:
+                    await websocket.send("invalid auth")
+                    continue
+
+                if not command_type:
+                    await websocket.send("invalid parameters")
+                    continue
+
+                if command_type == "verify_auth":
+                    await websocket.send("valid auth")
+
+                elif command_type == "play_song":
+                    search_youtube_and_add_to_queue(self.reverb, args)
+
+                elif command_type == "skip_song":
+                    self.reverb.queue_manager.skip_track()
+
+                elif command_type == "remove_song":
+                    try:
+                        index = int(args)
+                        if self.reverb.queue_manager.get_queue_size() >= index >= 0:
+                            song = self.reverb.song_queue[index]
+                            self.reverb.queue_manager.remove_song(song)
+
+                            if index == 1:
+                                self.reverb.queue_manager.skip_track()
+                    except Exception:
+                        pass
+
+                elif command_type in ["pause_song", "resume_song"]:
+                    self.reverb.queue_manager.toggle_pause()
+
+                elif command_type == "toggle_loop":
+                    self.reverb.queue_manager.toggle_loop()
+
+                elif command_type == "receive" and not sent_initial:
+                    sent_initial = True
+                    await websocket.send(self.get_state())
+
+                elif command_type == "get_time":
+                    if self.reverb.current_song is not None:
+                        await websocket.send(json.dumps({
+                            "type": "time",
+                            "value": time() - self.reverb.queue_manager.song_start_time if self.reverb.queue_manager.song_start_time is not None else None
+                        }))
+
+            except JSONDecodeError:
+                continue
+        self.sockets.remove(websocket)
+
+    async def _run_async(self):
+        async with websockets.serve(self.handler, self.host, self.port):
+            print(f"WebSocket server running on ws://{self.host}:{self.port}")
+            await asyncio.Future()  # run forever
+
+    def run(self):
+        asyncio.run(self._run_async())
+
+    def announce(self):
+        try:
+            try:
+                asyncio.create_task(self._announce_async())
+            except:
+                asyncio.run(self._announce_async())
+        except:
+            pass
 
 class ConverterManager:
     def __init__(self, reverb):
@@ -200,7 +330,6 @@ class ConverterManager:
 
             id_set = set(song.id for song in self.reverb.song_queue)
             new_songs = set()
-            threads = []
 
             for unqueued_song in self.reverb.metadata_queue.copy():
                 if unqueued_song.id in id_set:
@@ -211,13 +340,9 @@ class ConverterManager:
                     self.reverb.metadata_queue.remove(unqueued_song)
                     continue
 
-                thread = threading.Thread(target=self._download_song, args=(unqueued_song,))
-                thread.start()
-                threads.append((thread, unqueued_song))
-
-            for thread, unqueued_song in threads:
-                thread.join()
+                self._download_song(unqueued_song)
                 new_songs.add(unqueued_song)
+
 
             if len(new_songs) > 0:
                 channel = self.reverb.mumble.my_channel()
@@ -228,3 +353,5 @@ class ConverterManager:
                         queue_diff += f"<br>{song.artist} - {song.title} [{utils.format_duration(song.duration)}] (position {idx + 1})"
 
                 channel.send_text_message(queue_diff[:512])
+                if self.reverb.socket_manager is not None:
+                    self.reverb.socket_manager.announce()

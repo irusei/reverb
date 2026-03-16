@@ -6,4 +6,13 @@ class Song:
         self.duration = duration
         self.url = url
         self.source = None
-        self.playing = False
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "artist": self.artist,
+            "title": self.title,
+            "duration": self.duration,
+            "url": self.url,
+            "source": self.source
+        }
