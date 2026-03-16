@@ -16,6 +16,7 @@ mumble music bot
 - uv
 - ffmpeg (with opus support)
 - a mumble server
+- **Linux** (Windows is not supported)
 
 ### Installation
 
@@ -50,8 +51,9 @@ Each WebSocket request requires the "auth" field to be set. You can check if the
 {"type": "verify_auth", "auth": "YOUR_AUTH_KEY"}
 ```
 
-This will send back `valid auth` or `invalid auth`
-The auth is defined by `SOCKET_AUTH` in the .env file
+This will send back `valid auth` or `invalid auth`.
+
+The auth is defined by `SOCKET_AUTH` in the .env file.
 
 ### State Updates
 
