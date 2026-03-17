@@ -256,7 +256,7 @@ class SocketManager:
                             song = self.reverb.song_queue[index]
                             self.reverb.queue_manager.remove_song(song)
 
-                            if index == 1:
+                            if index == 0:
                                 self.reverb.queue_manager.skip_track()
                     except Exception:
                         pass
